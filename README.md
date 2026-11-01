@@ -31,27 +31,41 @@ Post-session packet analysis is performed using **PyShark** (Wireshark's Python 
 
 ## Prerequisites
 
-| Requirement | Notes |
-|-------------|-------|
-| Linux or WSL2 (Ubuntu 20.04+ recommended) | Raw sockets are a Linux feature; WSL2 works, WSL1 does **not** support raw sockets |
-| `g++` with C++17 support | Usually pre-installed; `sudo apt install g++` if missing |
-| Python 3 + PyShark | `pip3 install pyshark` |
-| tcpdump | `sudo apt install tcpdump` |
-| Wireshark (optional, for GUI inspection) | `sudo apt install wireshark` |
-| Root / `sudo` privileges | Required for `SOCK_RAW` socket creation (`CAP_NET_RAW`) |
+| Requirement | Install command | Notes |
+|-------------|-----------------|-------|
+| Linux or WSL2 | — | Raw sockets need WSL **2** (not WSL 1) |
+| `g++` C++17 | `sudo apt install g++` | Usually pre-installed |
+| `make` | `sudo apt install make` | For the Makefile |
+| `tshark` | `sudo apt install tshark` | Required by PyShark |
+| `python3.14-venv` | `sudo apt install python3.14-venv` | Needed to create a venv on Ubuntu 25.x |
+| Root / `sudo` | — | Raw sockets need `CAP_NET_RAW` |
+
+> **Note:** On modern Ubuntu/Debian (Python 3.12+), `pip install` is blocked system-wide.
+> You **must** use a virtual environment — see the one-time setup below.
 
 ---
 
-## Build Instructions
+## One-Time Setup (do this once)
 
 ```bash
-# Build both sender and receiver:
-make all
+# 1. Install system dependencies
+sudo apt install -y g++ make tshark python3.14-venv
 
-# Or compile individually:
-g++ -std=c++17 -Wall -O2 -o sender sender.cpp
-g++ -std=c++17 -Wall -O2 -o receiver receiver.cpp
+# 2. Create a Python virtual environment inside the project folder
+python3 -m venv venv
+
+# 3. Activate it  (you must do this every new terminal session)
+source venv/bin/activate
+
+# 4. Install PyShark inside the venv
+pip install pyshark
+
+# 5. Build the C++ programs
+make all
 ```
+
+Your shell prompt will show `(venv)` when the environment is active.
+**Every time you open a new terminal**, re-run `source venv/bin/activate` before using `python3 analyze.py`.
 
 ---
 
@@ -59,13 +73,14 @@ g++ -std=c++17 -Wall -O2 -o receiver receiver.cpp
 
 ### On the Same Machine (Loopback)
 
-Open **three** terminals before starting.
+Open **three** terminals. In each one, `cd` into the project folder first.
 
-**Terminal 1 – Start packet capture FIRST (optional but recommended):**
+**Terminal 1 – Start packet capture FIRST:**
 ```bash
 sudo tcpdump -i lo -w capture.pcap port 54321
 ```
-> Start tcpdump *before* the sender and receiver so that the SYN packet is captured.
+> Start tcpdump *before* the sender/receiver so the SYN packet is captured.
+> Stop it with **Ctrl+C** after the session ends.
 
 **Terminal 2 – Receiver:**
 ```bash
@@ -78,24 +93,187 @@ sudo ./receiver 54321 4
 sudo ./sender 127.0.0.1 54321 4 10
 # Args: <receiver_ip> <port> <window_size_segments> <loss_probability_%>
 ```
+The `10` means 10 % simulated packet loss — enough to trigger retransmissions and AIMD.
 
-**After the session completes**, stop tcpdump (Ctrl+C) then run analysis:
+**After the session completes**, stop tcpdump (Ctrl+C in Terminal 1), then analyse:
 ```bash
+# Make sure the venv is active first!
+source venv/bin/activate
 python3 analyze.py capture.pcap
 ```
 
-Check the received records:
+Verify the received records match the originals:
 ```bash
 diff records.txt received_records.txt
-# Should produce no output (files are identical)
+# No output = perfect delivery ✓
 ```
 
-### On Two Different Machines
+### On Two Different Machines over Wi-Fi (Wireless LAN)
 
-1. Replace `127.0.0.1` with the receiver machine's IP address.
-2. Use `eth0` (or your actual interface name) instead of `lo` in the tcpdump command.
-3. Ensure both machines are on the same network or have routing configured.
-4. Firewall rules may need to allow raw TCP traffic on the chosen port.
+This is the recommended setup for a proper demo — sender and receiver run on two separate physical laptops connected to the **same Wi-Fi router**.
+
+#### Step 1 — Find each machine's Wi-Fi IP address
+
+Run this on **both machines** and note the IP under the `wlan0` interface:
+
+```bash
+ip addr show wlan0
+# Look for a line like: inet 192.168.1.X/24
+# That X.X.X.X is the machine's Wi-Fi IP address
+```
+
+If `wlan0` is not found, try:
+```bash
+ip addr show        # list all interfaces and find the one with 192.168.x.x
+```
+
+You will end up with two IPs, for example:
+- **Receiver machine:** `192.168.1.10`
+- **Sender machine:**   `192.168.1.20`
+
+---
+
+#### Step 2 — Install and build on both machines
+
+Run the full one-time setup on **both machines**:
+
+```bash
+# Clone / copy the project to both machines, then:
+sudo apt install -y g++ make tshark python3.14-venv
+make all
+python3 -m venv venv && source venv/bin/activate && pip install pyshark
+```
+
+---
+
+#### Step 3 — Disable the firewall (or open the port)
+
+Raw TCP packets on a custom port (54321) may be blocked by `ufw`. Run on **both machines**:
+
+```bash
+# Option A – disable firewall entirely (easiest for a lab demo)
+sudo ufw disable
+
+# Option B – just open the port
+sudo ufw allow 54321/tcp
+sudo ufw allow in proto tcp to any port 54321
+```
+
+---
+
+#### Step 4 — Start the packet capture on the receiver machine
+
+Open a terminal on the **receiver machine**. Start tcpdump on the Wi-Fi interface **before** starting either program:
+
+```bash
+# Replace wlan0 with your actual Wi-Fi interface name
+sudo tcpdump -i wlan0 -w capture.pcap port 54321
+```
+
+---
+
+#### Step 5 — Start the receiver
+
+Open a **second terminal** on the **receiver machine**:
+
+```bash
+cd "/path/to/EndAssignment"
+source venv/bin/activate
+sudo ./receiver 54321 4
+# Args: <port> <window_size_segments>
+```
+
+The receiver will print `[INFO] Listening on port 54321…` and wait.
+
+---
+
+#### Step 6 — Start the sender
+
+Open a terminal on the **sender machine** and use the **receiver's Wi-Fi IP**:
+
+```bash
+cd "/path/to/EndAssignment"
+sudo ./sender 192.168.1.10 54321 4 10
+#              ↑ receiver's Wi-Fi IP
+# Args: <receiver_ip> <port> <window_size> <loss_prob_%>
+```
+
+> **Important:** You must also update `g_src_ip` in `sender.cpp` (line ~675) to use your
+> actual Wi-Fi IP instead of `127.0.0.1`, then rebuild with `make all`:
+> ```cpp
+> // Change this line in sender.cpp:
+> g_src_ip = inet_addr("192.168.1.20");   // ← sender's own Wi-Fi IP
+> ```
+
+---
+
+#### Step 7 — Run the analysis
+
+After the session ends, stop tcpdump (Ctrl+C on the receiver machine), then:
+
+```bash
+# On the receiver machine (venv must be active):
+source venv/bin/activate
+python3 analyze.py capture.pcap
+
+# Copy received_records.txt back to the sender machine and diff:
+scp received_records.txt user@192.168.1.20:/path/to/EndAssignment/
+diff records.txt received_records.txt
+```
+
+---
+
+#### Wi-Fi Quick Reference
+
+```
+Receiver machine (192.168.1.10)         Sender machine (192.168.1.20)
+───────────────────────────────         ──────────────────────────────
+T1: sudo tcpdump -i wlan0               (nothing — capture runs on receiver)
+    -w capture.pcap port 54321
+
+T2: sudo ./receiver 54321 4             sudo ./sender 192.168.1.10 54321 4 10
+
+T3: python3 analyze.py capture.pcap     diff records.txt received_records.txt
+    (after Ctrl+C on tcpdump)
+```
+
+#### Common Wi-Fi issues
+
+| Problem | Fix |
+|---------|-----|
+| Sender says `sendto: Network is unreachable` | Check `g_src_ip` is set to sender's actual Wi-Fi IP, not `127.0.0.1` |
+| Receiver never gets SYN | Firewall is blocking — run `sudo ufw disable` on receiver |
+| `tcpdump: wlan0: No such device` | Find correct interface with `ip addr show` and use that name |
+| Packets visible in tcpdump but receiver ignores them | IP filter mismatch — verify `g_peer_ip` / `g_our_ip` in code match actual IPs |
+| Works on loopback but not Wi-Fi | Some routers block raw TCP between clients — try disabling AP isolation in router settings |
+
+### Quick Reference Card
+
+```bash
+# ── Every new terminal ────────────────────────────────────
+cd "/mnt/d/NIT/Sem 5/CN/EndAssignment"
+source venv/bin/activate          # activate Python venv
+
+# ── One-time build ────────────────────────────────────────
+make all
+
+# ── Demo: loopback (same machine, three terminals) ────────
+# T1:  sudo tcpdump -i lo -w capture.pcap port 54321
+# T2:  sudo ./receiver 54321 4
+# T3:  sudo ./sender 127.0.0.1 54321 4 10
+
+# ── Demo: Wi-Fi (two machines) ───────────────────────────
+# On RECEIVER machine:
+#   T1: sudo tcpdump -i wlan0 -w capture.pcap port 54321
+#   T2: sudo ./receiver 54321 4
+# On SENDER machine:
+#   T1: sudo ./sender <RECEIVER_WIFI_IP> 54321 4 10
+
+# ── After session ─────────────────────────────────────────
+# (Ctrl+C tcpdump first)
+python3 analyze.py capture.pcap
+diff records.txt received_records.txt
+```
 
 ---
 
@@ -401,7 +579,11 @@ Each line of sender/receiver terminal output is prefixed with a **colored tag** 
 | `Address already in use` | Wait ~30 seconds for `TIME_WAIT` to expire, or use a different port number |
 | `No packets captured` | Ensure tcpdump uses the correct interface: `lo` for loopback (same machine), `eth0` for LAN |
 | Receiver misses all packets | On some kernels, loopback raw sockets need `IPPROTO_TCP` instead of `IPPROTO_RAW` — see note in `common.h` |
-| `pyshark` import error | Install tshark: `sudo apt install tshark`; then reinstall PyShark: `pip3 install --upgrade pyshark` |
+| `pip install pyshark` blocked | Ubuntu 23+ blocks system-wide pip. Run `sudo apt install python3.14-venv` then `python3 -m venv venv && source venv/bin/activate && pip install pyshark` |
+| `No such file: venv/bin/activate` | `python3.14-venv` package was not installed yet — run `sudo apt install python3.14-venv` first |
+| `There is no current event loop` | Fixed in `analyze.py` (asyncio patch at top of file). Ensure you are running the latest version of the file |
+| `asyncio has no attribute 'set_child_watcher'` | Python 3.12+ removed this API; PyShark 0.6 still calls it. Fixed in `analyze.py` with a no-op monkey-patch before `import pyshark` |
+| `pyshark` import error | Install tshark: `sudo apt install tshark`; PyShark requires it as a backend |
 | Checksum always fails | Verify that `IP_HDRINCL` is set and the pseudo-header uses network byte order (use `htons`/`htonl`) |
 | Sender hangs after handshake | Check that both processes are using the same port and IP; verify no firewall rules blocking raw packets |
 | `received_records.txt` is empty | Receiver may have terminated early — check for checksum failures or window size = 0 |

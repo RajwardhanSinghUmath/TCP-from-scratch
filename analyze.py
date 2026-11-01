@@ -15,7 +15,38 @@ Sections:
 
 import sys
 import os
+import asyncio
 from datetime import datetime
+
+# ── Fix: PyShark 0.6 uses asyncio child-watcher APIs removed in Python 3.12+ ──
+# Stub out every missing class/function before pyshark is imported.
+
+# 1. Ensure a running event loop exists (Python 3.10+ no longer creates one)
+try:
+    _loop = asyncio.get_event_loop()
+    if _loop.is_closed():
+        raise RuntimeError
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
+# 2. Re-add all removed child-watcher symbols as harmless stubs
+class _DummyWatcher:
+    """No-op stand-in for the removed asyncio child watcher classes."""
+    def add_child_handler(self, *a, **kw): pass
+    def remove_child_handler(self, *a, **kw): pass
+    def attach_loop(self, *a, **kw): pass
+    def close(self): pass
+    def __enter__(self): return self
+    def __exit__(self, *a): pass
+
+for _name in ('AbstractChildWatcher', 'SafeChildWatcher', 'FastChildWatcher',
+              'MultiLoopChildWatcher', 'ThreadedChildWatcher'):
+    if not hasattr(asyncio, _name):
+        setattr(asyncio, _name, _DummyWatcher)
+
+for _fname in ('set_child_watcher', 'get_child_watcher'):
+    if not hasattr(asyncio, _fname):
+        setattr(asyncio, _fname, lambda *a, **kw: _DummyWatcher())
 
 # ── Colour codes ──────────────────────────────────────────────────────────────
 RED    = '\033[91m'

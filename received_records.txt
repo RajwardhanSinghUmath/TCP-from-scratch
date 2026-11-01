@@ -1,0 +1,20 @@
+1,Alice Johnson,Computer Science,A
+2,Bob Martinez,Electrical Engineering,B+
+3,Carol Patel,Computer Science,A+
+4,David Kim,Mechanical Engineering,B
+5,Emma Williams,Civil Engineering,A-
+6,Frank Chen,Computer Science,B+
+7,Grace Thomas,Electronics,A
+8,Henry Nguyen,Information Technology,B
+9,Isabel Garcia,Computer Science,A+
+10,James Robinson,Electrical Engineering,C+
+11,Karen Okonkwo,Mechanical Engineering,A-
+12,Liam Sharma,Computer Science,B+
+13,Mia Fernandez,Civil Engineering,B
+14,Noah Singh,Information Technology,A
+15,Olivia Brown,Computer Science,A-
+16,Patrick Dubois,Electronics,B+
+17,Quinn Ahmed,Electrical Engineering,A
+18,Rachel Liu,Computer Science,B
+19,Samuel Torres,Mechanical Engineering,A-
+20,Tina Vasquez,Information Technology,B+

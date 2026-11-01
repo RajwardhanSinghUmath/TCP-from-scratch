@@ -40,7 +40,7 @@
 - Forces understanding of **every field** in TCP and IP headers
 - Makes checksum computation, window management, and state transitions **tangible**
 - Packet captures reveal the actual bytes on the wire — there is no "magic"
-
+z
 ---
 
 ## System Architecture
@@ -58,7 +58,7 @@
 │  └───────────────────────────────┘  │     │  └───────────────────────────────┘  │
 │  ┌───────────────────────────────┐  │     │  ┌───────────────────────────────┐  │
 │  │  IP Layer + Raw Socket        │  │─────┼─►│  IP Layer + Raw Socket        │  │
-│  │  (IP_HDRINCL, SOCK_RAW)      │  │     │  │  (IPPROTO_TCP)               │  │
+│  │  (IP_HDRINCL, SOCK_RAW)       │  │     │  │  (IPPROTO_TCP)                │  │
 │  └───────────────────────────────┘  │     │  └───────────────────────────────┘  │
 └─────────────────────────────────────┘     └─────────────────────────────────────┘
                             │                             │
@@ -89,15 +89,15 @@
 Sender (Client)                         Receiver (Server)
 CLOSED                                  LISTEN
 
-  │──── SYN (Seq=1000, SYN=1) ────────►│
+  │──── SYN (Seq=1000, SYN=1) ──────────►│
   │                                      │ LISTEN → SYN_RECEIVED
-  │◄─── SYN-ACK (Seq=5000,              │
+  │◄─── SYN-ACK (Seq=5000,               │
   │              Ack=1001,               │
-  │              SYN=1, ACK=1) ─────────│
+  │              SYN=1, ACK=1) ──────────│
   │                                      │
   SYN_SENT → ESTABLISHED                 │
   │                                      │
-  │──── ACK (Seq=1001, Ack=5001) ──────►│ SYN_RECEIVED → ESTABLISHED
+  │──── ACK (Seq=1001, Ack=5001) ───────►│ SYN_RECEIVED → ESTABLISHED
   │                                      │
         ══════ [ESTABLISHED] ══════
 ```
@@ -144,7 +144,7 @@ Sender (Window=4)                       Receiver
   │──── DATA Seq=1054, Len=53 ────────►│ Record #2 ✓
   │──── DATA Seq=1107, Len=53 ────────►│ Record #3 ✓
   │──── DATA Seq=1160, Len=53 ────────►│ Record #4 ✓  ← Window Full
-  │                                     │
+  │                                    │
   │◄─── ACK 1054 (rwnd=4) ─────────────│
   │◄─── ACK 1107 ──────────────────────│
   │──── DATA Seq=1213, Len=53 ────────►│ Record #5 ✓
@@ -350,17 +350,17 @@ Sender (Active Close)                   Receiver (Passive Close)
 ESTABLISHED                             ESTABLISHED
 
   │──── FIN (Seq=N) ──────────────────►│ ESTABLISHED → CLOSE_WAIT
-  │                                     │
+  │                                    │
   │◄─── ACK (Ack=N+1) ─────────────────│
   │ FIN_WAIT_1 → FIN_WAIT_2            │
-  │                                     │ (receiver finishes any remaining sends)
+  │                                    │ (receiver finishes any remaining sends)
   │◄─── FIN (Seq=M) ───────────────────│ CLOSE_WAIT → LAST_ACK
-  │                                     │
+  │                                    │
   │──── ACK (Ack=M+1) ────────────────►│ LAST_ACK → CLOSED ✓
   │ FIN_WAIT_2 → TIME_WAIT             │
-  │                                     │
+  │                                    │
   │  [Wait 2 × MSL ≈ 60–120 seconds]   │
-  │                                     │
+  │                                    │
   │ TIME_WAIT → CLOSED ✓               │
 ```
 
